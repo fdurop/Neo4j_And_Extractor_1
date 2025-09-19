@@ -2445,33 +2445,17 @@ def build_multimodal_knowledge_graph(
 
 # 保留原来的主函数作为示例
 if __name__ == "__main__":
-    # 配置参数
-    config = {
-        'neo4j_uri': "bolt://101.132.130.25:7687",
-        'neo4j_user': "neo4j",
-        'neo4j_password': "wangshuxvan@1",
-        'deepseek_api_key': "sk-c28ec338b39e4552b9e6bded47466442",
-        'input_dir': "input",
-        'output_dir': "output",
-        'document_name': "Arduino课程PPT",
-        'fast_mode': False,
-        'clear_database': False,
-        'verbose': True
-    }
 
-    # 调用函数
-    result = build_multimodal_knowledge_graph(**config)
-
-    # 处理结果
-    if result['success']:
-        print(f"\n✅ 处理成功完成！")
-        print(f"📊 最终统计:")
-        print(f"   - 处理文件: {len(result['files_processed'])}个")
-        print(f"   - 抽取实体: {result['entities_extracted']}个")
-        print(f"   - 抽取关系: {result['relationships_extracted']}个")
-        print(f"   - 保存实体: {result['entities_saved']}个")
-        print(f"   - 保存关系: {result['relationships_saved']}个")
-    else:
-        print(f"\n❌ 处理失败: {result['error']}")
-
-    print(f"\n👋 程序结束")
+    
+result = build_multimodal_knowledge_graph(
+    neo4j_uri="bolt://101.132.130.25:7687",
+    neo4j_user="neo4j",
+    neo4j_password="wangshuxvan@1",
+    deepseek_api_key="sk-c28ec338b39e4552b9e6bded47466442",
+    input_dir = r"C:\Users\Lin\PycharmProjects\PythonProject\input",
+    output_dir = r"C:\Users\Lin\PycharmProjects\PythonProject\output",
+    document_name="Arduino课程PPT",
+    fast_mode=False,
+    clear_database=False,
+    verbose=True
+)
