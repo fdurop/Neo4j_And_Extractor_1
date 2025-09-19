@@ -52,7 +52,7 @@
 │ • 语义理解       │
 └─────────────────┘
 
-复制
+
 
 ## 📋 系统要求
 
@@ -112,7 +112,7 @@ docker run \
 配置文件设置
 编辑 config/config.json:
 
-复制
+
 {
   "neo4j": {
     "uri": "bolt://localhost:7687",
@@ -125,13 +125,13 @@ docker run \
   }
 }
 3. 准备文档
-复制
+
 # 将PPT/PDF文件放入input目录
 cp your-documents/*.pptx input/
 cp your-documents/*.pdf input/
 4. 运行系统
 基本使用
-复制
+
 from multimodal_kg import build_multimodal_knowledge_graph
 
 # 配置参数
@@ -152,7 +152,7 @@ if result['success']:
 else:
     print(f"❌ 处理失败: {result['error']}")
 使用配置文件
-复制
+
 import json
 from multimodal_kg import build_multimodal_knowledge_graph
 
@@ -170,7 +170,7 @@ result = build_multimodal_knowledge_graph(
 )
 📖 详细使用说明
 函数参数详解
-复制
+
 def build_multimodal_knowledge_graph(
     neo4j_uri: str,           # Neo4j数据库URI
     neo4j_user: str,          # Neo4j用户名  
@@ -184,7 +184,7 @@ def build_multimodal_knowledge_graph(
     verbose: bool = True      # 详细输出
 ) -> dict:
 返回值说明
-复制
+
 {
     'success': bool,              # 处理是否成功
     'error': str,                # 错误信息
@@ -201,7 +201,7 @@ def build_multimodal_knowledge_graph(
 }
 🔧 高级配置
 1. 快速模式
-复制
+
 # 跳过CLIP图像描述生成，提高处理速度
 result = build_multimodal_knowledge_graph(
     # ... 其他参数
@@ -209,7 +209,7 @@ result = build_multimodal_knowledge_graph(
     verbose=False
 )
 2. 自定义路径
-复制
+
 import os
 
 # 使用绝对路径
@@ -220,7 +220,7 @@ result = build_multimodal_knowledge_graph(
     output_dir=os.path.join(project_root, "results"),
 )
 3. 批量处理
-复制
+
 def batch_process():
     configs = [
         {
@@ -249,7 +249,7 @@ def batch_process():
         )
         print(f"处理 {config['document_name']}: {'成功' if result['success'] else '失败'}")
 📁 输出文件结构
-复制
+
 output/
 ├── text/                    # 文本数据
 │   ├── document_slide_1.json
@@ -272,7 +272,7 @@ output/
 └── document_pptx_metadata.json  # 元数据文件
 🗄️ Neo4j知识图谱查询
 基本查询
-复制
+
 -- 查看所有实体
 MATCH (e:Entity) RETURN e LIMIT 25
 
