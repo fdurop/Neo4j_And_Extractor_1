@@ -4,134 +4,64 @@ from typing import Optional, Dict, List, Tuple
 import json
 from collections import defaultdict
 
-'''
-# 导入多模态知识图谱构建函数
-from multimodal_kg import build_multimodal_knowledge_graph
+# ==================== 日志系统集成 ====================
+import logging
+import uuid
 
-# 调用多模态知识图谱构建函数，构建从PPT/PDF到Neo4j知识图谱的完整流程
-result = build_multimodal_knowledge_graph(
-    # ==================== Neo4j数据库连接配置 ====================
-    neo4j_uri="bolt://101.132.130.25:7687",      # Neo4j数据库连接地址
-                                                   # bolt:// 是Neo4j的连接协议
-                                                   # 101.132.130.25 是服务器IP地址
-                                                   # 7687 是Neo4j的默认bolt端口
-    
-    neo4j_user="neo4j",                           # Neo4j数据库用户名
-                                                   # 默认管理员用户名通常是 "neo4j"
-    
-    neo4j_password="wangshuxvan@1",               # Neo4j数据库密码
-                                                   # 这是连接数据库所需的密码
-    
-    # ==================== AI模型API配置 ====================
-    deepseek_api_key="sk-c28ec338b39e4552b9e6bded47466442",  # DeepSeek大语言模型的API密钥
-                                                               # 用于智能实体关系抽取
-                                                               # 需要在DeepSeek官网申请
-    
-    # ==================== 文件路径配置 ====================
-    input_dir=r"C:\Users\Lin\PycharmProjects\PythonProject\input",   # 输入文件目录的绝对路径
-                                                                       # 存放待处理的PPT和PDF文件
-                                                                       # r"" 表示原始字符串，避免转义字符问题
-    
-    output_dir=r"C:\Users\Lin\PycharmProjects\PythonProject\output",  # 输出文件目录的绝对路径
-                                                                       # 存放处理后的多模态数据
-                                                                       # 包括文本、图像、表格等提取结果
-    
-    # ==================== 文档标识配置 ====================
-    document_name="Arduino课程PPT",                # 文档名称，用于在Neo4j中标识这批文档
-                                                    # 会作为Document节点的name属性
-                                                    # 便于后续查询和管理
-    # ==================== 处理模式配置 ====================
-    fast_mode=False,                              # 快速模式开关
-                                                  # False: 完整模式，包含CLIP图像描述生成（较慢但更全面）
-                                                  # True:  快速模式，跳过耗时的图像处理（更快但功能简化）
-    
-    clear_database=False,                         # 数据库清空开关（危险操作）
-                                                  # False: 保留现有数据，追加新数据
-                                                  # True:  清空数据库后再导入（会删除所有现有数据）
-    
-    # ==================== 输出控制配置 ====================
-    verbose=True                                  # 详细输出开关
-                                                  # True:  显示详细的处理过程和统计信息
-                                                  # False: 只显示关键信息，减少输出内容
-)
+# 检测是否在Flask环境中
+try:
+    from flask import g, has_request_context
 
-# ==================== 处理结果说明 ====================
-# result 是一个字典，包含以下关键信息：
-# {
-#     'success': bool,              # 处理是否成功
-#     'error': str,                # 错误信息（如果处理失败）
-#     'statistics': {              # 文件统计信息
-#         'ppt_count': int,        # 处理的PPT文件数量
-#         'pdf_count': int         # 处理的PDF文件数量
-#     },
-#     'files_processed': list,     # 实际处理的文件列表
-#     'entities_extracted': int,   # 从文档中抽取的实体总数
-#     'relationships_extracted': int, # 从文档中抽取的关系总数
-#     'entities_saved': int,       # 成功保存到Neo4j的实体数量
-#     'relationships_saved': int,  # 成功保存到Neo4j的关系数量
-#     'neo4j_stats': {            # Neo4j数据库统计信息
-#         'total_nodes': int,      # 数据库中的总节点数
-#         'total_relationships': int, # 数据库中的总关系数
-#         'total_documents': int,  # 数据库中的文档数量
-#         'entity_types': list     # 实体类型分布统计
-#     }
-# }
+    FLASK_AVAILABLE = True
+except ImportError:
+    FLASK_AVAILABLE = False
+    has_request_context = lambda: False
 
-# ==================== 使用示例：检查处理结果 ====================
-if result['success']:
-    print(f"✅ 处理成功完成！")
-    print(f"📊 处理统计:")
-    print(f"   - 输入文件: {len(result['files_processed'])}个")
-    print(f"   - PPT文件: {result['statistics']['ppt_count']}个")
-    print(f"   - PDF文件: {result['statistics']['pdf_count']}个")
-    print(f"   - 抽取实体: {result['entities_extracted']}个")
-    print(f"   - 抽取关系: {result['relationships_extracted']}个")
-    print(f"   - 保存实体: {result['entities_saved']}个")
-    print(f"   - 保存关系: {result['relationships_saved']}个")
-    print(f"   - 数据库节点总数: {result['neo4j_stats']['total_nodes']}个")
-    print(f"   - 数据库关系总数: {result['neo4j_stats']['total_relationships']}个")
-else:
-    print(f"❌ 处理失败: {result['error']}")
-    print("请检查配置参数和网络连接")
 
-# ==================== 系统工作流程说明 ====================
-# 1. 初始化多模态预处理器（加载CLIP模型、OCR引擎等）
-# 2. 扫描input_dir目录，找到所有PPT和PDF文件
-# 3. 对每个文件进行多模态数据提取：
-#    - 文本内容提取
-#    - 图像提取和CLIP描述生成
-#    - 表格结构化提取
-#    - 公式识别和转换
-#    - 代码片段检测
-# 4. 使用DeepSeek大语言模型进行智能实体关系抽取
-# 5. 将抽取的实体关系保存到Neo4j知识图谱数据库
-# 6. 返回详细的处理结果和统计信息
+# 日志过滤器：为每条日志添加 request_id
+class RequestIdFilter(logging.Filter):
+    def filter(self, record):
+        if FLASK_AVAILABLE and has_request_context() and hasattr(g, 'request_id'):
+            record.request_id = g.request_id
+        elif hasattr(self, '_standalone_request_id'):
+            record.request_id = self._standalone_request_id
+        else:
+            record.request_id = "N/A"
+        return True
 
-# ==================== 输出文件结构说明 ====================
-# output_dir/
-# ├── text/                    # 文本数据（JSON格式）
-# ├── images/                  # 图像文件和CLIP描述
-# ├── tables/                  # 表格数据（CSV和JSON格式）
-# ├── formulas/               # 数学公式数据
-# ├── code/                   # 代码片段数据
-# └── *_metadata.json         # 处理元数据文件
 
-# ==================== Neo4j查询示例 ====================
-# 连接到Neo4j后，可以使用以下Cypher查询语句：
-# 
-# 查看所有实体：
-# MATCH (e:Entity) RETURN e LIMIT 25
-# 
-# 查看所有关系：
-# MATCH (s)-[r]->(t) RETURN s.name, type(r), t.name LIMIT 25
-# 
-# 查看文档信息：
-# MATCH (d:Document) RETURN d
-# 
-# 搜索特定实体：
-# MATCH (e:Entity) WHERE toLower(e.name) CONTAINS 'arduino' RETURN e
+# 配置日志
+def setup_logger(name: str = __name__, log_file: str = "app.log") -> logging.Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
 
-'''
+    if not logger.handlers:
+        formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - [%(request_id)s] - %(name)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+
+        # 文件处理器
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setFormatter(formatter)
+        request_filter = RequestIdFilter()
+        file_handler.addFilter(request_filter)
+        logger.addHandler(file_handler)
+
+        # 控制台处理器
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        console_handler.addFilter(request_filter)
+        logger.addHandler(console_handler)
+
+        # 保存 filter 引用，用于独立运行时设置 request_id
+        logger._request_filter = request_filter
+
+    return logger
+
+
+# 全局 logger
+logger = setup_logger()
 
 
 
@@ -152,10 +82,10 @@ class Neo4jKnowledgeGraph:
             # 测试连接
             with self.driver.session() as session:
                 session.run("RETURN 1")
-            print("✅ Neo4j连接成功")
+            logger.info("✅ Neo4j连接成功")
 
         except Exception as e:
-            print(f"❌ Neo4j连接失败: {e}")
+            logger.error(f"❌ Neo4j连接失败: {e}")
             raise
 
     def close(self):
@@ -167,7 +97,7 @@ class Neo4jKnowledgeGraph:
         """清空数据库（谨慎使用）"""
         with self.driver.session() as session:
             session.run("MATCH (n) DETACH DELETE n")
-        print("🗑️ 数据库已清空")
+        logger.info("🗑️ 数据库已清空")
 
     def create_document_node(self, doc_name: str, doc_type: str = "ppt", metadata: Dict = None):
         """创建文档节点"""
@@ -187,7 +117,7 @@ class Neo4jKnowledgeGraph:
                 params.update(metadata)
 
             session.run(query, params)
-        print(f"📄 创建文档节点: {doc_name}")
+        logger.info(f"📄 创建文档节点: {doc_name}")
 
     def create_entity_node(self, entity_name: str, entity_type: str, description: str = "",
                            metadata: Dict = None):
@@ -245,7 +175,7 @@ class Neo4jKnowledgeGraph:
     def save_extracted_data(self, extracted_data, ppt_name: str):
         """保存抽取的实体关系数据到Neo4j"""
         try:
-            print(f"💾 开始保存数据到Neo4j: {ppt_name}")
+            logger.info(f"💾 开始保存数据到Neo4j: {ppt_name}")
 
             # 1. 创建PPT文档节点
             self.create_document_node(ppt_name, "ppt", {
@@ -254,7 +184,7 @@ class Neo4jKnowledgeGraph:
             })
 
             # 2. 批量创建实体节点
-            print(f"   创建 {len(extracted_data.entities)} 个实体节点...")
+            logger.info(f"   创建 {len(extracted_data.entities)} 个实体节点...")
             entity_count = 0
             for entity in extracted_data.entities:
                 try:
@@ -274,11 +204,11 @@ class Neo4jKnowledgeGraph:
                     entity_count += 1
 
                 except Exception as e:
-                    print(f"     ⚠️ 创建实体失败 {entity['name']}: {e}")
+                    logger.warning(f"     ⚠️ 创建实体失败 {entity['name']}: {e}")
                     continue
 
             # 3. 批量创建关系
-            print(f"   创建 {len(extracted_data.relationships)} 个关系...")
+            logger.info(f"   创建 {len(extracted_data.relationships)} 个关系...")
             relation_count = 0
             for rel in extracted_data.relationships:
                 try:
@@ -295,13 +225,13 @@ class Neo4jKnowledgeGraph:
                     relation_count += 1
 
                 except Exception as e:
-                    print(f"     ⚠️ 创建关系失败 {rel['source']}->{rel['target']}: {e}")
+                    logger.warning(f"     ⚠️ 创建关系失败 {rel['source']}->{rel['target']}: {e}")
                     continue
 
-            print(f"✅ 数据保存完成:")
-            print(f"   📄 文档: {ppt_name}")
-            print(f"   🏷️  实体: {entity_count}/{len(extracted_data.entities)}")
-            print(f"   🔗 关系: {relation_count}/{len(extracted_data.relationships)}")
+            logger.info(f"✅ 数据保存完成:")
+            logger.info(f"   📄 文档: {ppt_name}")
+            logger.info(f"   🏷️  实体: {entity_count}/{len(extracted_data.entities)}")
+            logger.info(f"   🔗 关系: {relation_count}/{len(extracted_data.relationships)}")
 
             return {
                 'document': ppt_name,
@@ -311,7 +241,7 @@ class Neo4jKnowledgeGraph:
             }
 
         except Exception as e:
-            print(f"❌ 保存数据失败: {e}")
+            logger.error(f"❌ 保存数据失败: {e}")
             return {
                 'document': ppt_name,
                 'entities_saved': 0,
@@ -422,15 +352,15 @@ def save_to_neo4j(extracted_data, ppt_name: str, neo4j_uri: str, neo4j_user: str
 
         # 显示统计信息
         stats = kg.get_statistics()
-        print(f"\n📊 数据库统计信息:")
-        print(f"   📄 文档总数: {stats['total_documents']}")
-        print(f"   🏷️  节点总数: {stats['total_nodes']}")
-        print(f"   🔗 关系总数: {stats['total_relationships']}")
+        logger.info(f"\n📊 数据库统计信息:")
+        logger.info(f"   📄 文档总数: {stats['total_documents']}")
+        logger.info(f"   🏷️  节点总数: {stats['total_nodes']}")
+        logger.info(f"   🔗 关系总数: {stats['total_relationships']}")
 
         # 显示实体类型分布
-        print(f"\n🏷️  实体类型分布:")
+        logger.info(f"\n🏷️  实体类型分布:")
         for entity_type in stats['entity_types'][:5]:
-            print(f"   - {entity_type['entity_type']}: {entity_type['count']}个")
+            logger.info(f"   - {entity_type['entity_type']}: {entity_type['count']}个")
 
         return result
 
@@ -484,7 +414,7 @@ class DeepSeekClient:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            print(f"DeepSeek API调用失败: {e}")
+            logger.error(f"DeepSeek API调用失败: {e}")
             return {"choices": [{"message": {"content": "{\"entities\": [], \"relationships\": []}"}}]}
 
 
@@ -524,7 +454,7 @@ class EntityExtractor:
                                '_slide_' in f and f.endswith('.json') and not f.endswith('_desc.json')]
 
                 for slide_file in slide_files:
-                    slide_path = os.path.join(text_dir, slide_file)  # 注意这里改为text_dir
+                    slide_path = os.path.join(text_dir, slide_file)
                     try:
                         with open(slide_path, 'r', encoding='utf-8') as f:
                             slide_data = json.load(f)
@@ -538,7 +468,7 @@ class EntityExtractor:
                         })
 
                     except Exception as e:
-                        print(f"⚠️ 加载幻灯片文件失败 {slide_file}: {e}")
+                        logger.warning(f"⚠️ 加载幻灯片文件失败 {slide_file}: {e}")
 
             # 2. 加载图片数据 (从image目录)
             if os.path.exists(image_dir):
@@ -548,12 +478,12 @@ class EntityExtractor:
                 for image_file in image_files:
                     # 查找对应的描述文件
                     desc_file = image_file.replace('.png', '_desc.json').replace('.jpg', '_desc.json')
-                    desc_path = os.path.join(image_dir, desc_file)  # 注意这里改为image_dir
+                    desc_path = os.path.join(image_dir, desc_file)
 
                     slide_num = self._extract_slide_number(image_file)
 
                     image_data = {
-                        "image_path": os.path.join(image_dir, image_file),  # 注意这里改为image_dir
+                        "image_path": os.path.join(image_dir, image_file),
                         "slide_number": slide_num,
                         "filename": image_file,
                         "descriptions": [],
@@ -567,16 +497,16 @@ class EntityExtractor:
                                 desc_data = json.load(f)
                                 image_data["descriptions"] = desc_data.get("clip_descriptions", [])
                         except Exception as e:
-                            print(f"⚠️ 加载图片描述失败 {desc_file}: {e}")
+                            logger.warning(f"⚠️ 加载图片描述失败 {desc_file}: {e}")
 
                     result['images'].append(image_data)
 
-            print(f"✅ 数据加载完成:")
-            print(f"   - 幻灯片: {len(result['slides'])}个文件")
-            print(f"   - 图片: {len(result['images'])}个")
+            logger.info(f"✅ 数据加载完成:")
+            logger.info(f"   - 幻灯片: {len(result['slides'])}个文件")
+            logger.info(f"   - 图片: {len(result['images'])}个")
 
         except Exception as e:
-            print(f"❌ 数据加载失败: {e}")
+            logger.error(f"❌ 数据加载失败: {e}")
 
         return result
 
@@ -586,12 +516,12 @@ class EntityExtractor:
         all_relationships = []
         all_attributes = []
 
-        print("🔍 开始实体关系抽取...")
+        logger.info("🔍 开始实体关系抽取...")
 
         # 1. 处理幻灯片文本内容
         slides = multimodal_data.get('slides', [])
         for i, slide in enumerate(slides):
-            print(f"   处理幻灯片 {i + 1}/{len(slides)}: {slide.get('source_file', '')}")
+            logger.info(f"   处理幻灯片 {i + 1}/{len(slides)}: {slide.get('source_file', '')}")
             slide_entities, slide_relations = self._extract_from_slide_text(slide)
             all_entities.extend(slide_entities)
             all_relationships.extend(slide_relations)
@@ -600,7 +530,7 @@ class EntityExtractor:
         # 2. 处理图片内容
         images = multimodal_data.get('images', [])
         for i, image_data in enumerate(images):
-            print(f"   处理图片 {i + 1}/{len(images)}: {image_data.get('filename', '')}")
+            logger.info(f"   处理图片 {i + 1}/{len(images)}: {image_data.get('filename', '')}")
             img_entities = self._extract_from_image(image_data)
             all_entities.extend(img_entities)
 
@@ -608,7 +538,7 @@ class EntityExtractor:
         all_entities = self._deduplicate_entities(all_entities)
         all_relationships = self._deduplicate_relationships(all_relationships)
 
-        print(f"✅ 实体关系抽取完成: {len(all_entities)}个实体, {len(all_relationships)}个关系")
+        logger.info(f"✅ 实体关系抽取完成: {len(all_entities)}个实体, {len(all_relationships)}个关系")
 
         return ExtractedTriple(
             entities=all_entities,
@@ -624,7 +554,6 @@ class EntityExtractor:
         # 提取文本内容
         text_content = ""
         if isinstance(slide_content, dict):
-            # 如果content是字典，尝试提取文本字段
             text_content = slide_content.get('text', '') or slide_content.get('content', '') or str(slide_content)
         else:
             text_content = str(slide_content)
@@ -692,7 +621,7 @@ class EntityExtractor:
                 return entities, relationships
 
         except Exception as e:
-            print(f"   ⚠️ 幻灯片 {slide_num} 实体抽取失败: {e}")
+            logger.warning(f"   ⚠️ 幻灯片 {slide_num} 实体抽取失败: {e}")
 
         return [], []
 
@@ -709,7 +638,7 @@ class EntityExtractor:
             desc_text = desc_item.get('description', '')
             confidence = desc_item.get('confidence', 0)
 
-            if desc_text and confidence > 0.05:  # 置信度阈值
+            if desc_text and confidence > 0.05:
                 entities.append({
                     'name': desc_text,
                     'type': 'image_concept',
@@ -721,10 +650,9 @@ class EntityExtractor:
                     'filename': filename
                 })
 
-        # 2. 基于OCR文本抽取实体（如果有OCR文本）
+        # 2. 基于OCR文本抽取实体
         ocr_text = image_data.get('ocr_text', '')
         if ocr_text:
-            # Arduino关键词匹配
             for keyword in self.arduino_keywords:
                 if keyword.lower() in ocr_text.lower():
                     entities.append({
@@ -737,7 +665,7 @@ class EntityExtractor:
                         'filename': filename
                     })
 
-        # 3. 基于文件名抽取实体（如果文件名包含有用信息）
+        # 3. 基于文件名抽取实体
         if 'arduino' in filename.lower():
             entities.append({
                 'name': 'Arduino',
@@ -781,15 +709,9 @@ class EntityExtractor:
 def extract_entities_from_output(output_dir: str, deepseek_api_key: str) -> ExtractedTriple:
     """从多模态输出中抽取实体关系的主函数"""
     extractor = EntityExtractor(deepseek_api_key)
-
-    # 加载数据
     multimodal_data = extractor.load_multimodal_data(output_dir)
-
-    # 抽取实体关系
     extracted_data = extractor.extract_entities_from_multimodal(multimodal_data)
-
     return extracted_data
-
 
 
 import sys
@@ -800,8 +722,9 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 
 # 添加路径
-sys.path.append(parent_dir)  # 项目根目录
-sys.path.append(current_dir)  # src目录
+sys.path.append(parent_dir)
+sys.path.append(current_dir)
+
 import json
 import fitz  # PyMuPDF
 import torch
@@ -816,94 +739,88 @@ import re
 import pdfplumber
 import camelot
 import csv
-'''
-try:
-    # 懒加载高级PPTX处理器（若不可用则忽略）
-    from advanced_pptx_processor import process_pptx_file_advanced
-except Exception:
-    process_pptx_file_advanced = None
-'''
+
 
 class MultimodalPreprocessor:
     def __init__(self):
         """初始化多模态预处理工具"""
-        print("🚀 开始初始化多模态预处理工具...")
+        logger.info("🚀 开始初始化多模态预处理工具...")
 
         # 检测设备
-        print("📱 检测计算设备...")
+        logger.info("📱 检测计算设备...")
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"✓ 使用设备: {self.device}")
+        logger.info(f"✓ 使用设备: {self.device}")
 
         # 创建输出目录
-        print("📁 创建输出目录...")
+        logger.info("📁 创建输出目录...")
         os.makedirs("output/text", exist_ok=True)
         os.makedirs("output/images", exist_ok=True)
         os.makedirs("output/formulas", exist_ok=True)
         os.makedirs("output/tables", exist_ok=True)
         os.makedirs("output/code", exist_ok=True)
-        print("✓ 输出目录创建完成")
+        logger.info("✓ 输出目录创建完成")
 
         # 初始化CLIP模型（可能较慢）
-        print("🤖 正在加载CLIP模型...")
-        print("   ⏳ 本地模型加载中，请稍候...")
+        logger.info("🤖 正在加载CLIP模型...")
+        logger.info("   ⏳ 本地模型加载中，请稍候...")
         # ===== 修改这里：使用你的本地CLIP模型路径 =====
         local_clip_path = r"F:\Models\clip-vit-base-patch32"
         try:
             if os.path.exists(local_clip_path):
-                print(f"   📁 找到本地模型: {local_clip_path}")
+                logger.info(f"   📁 找到本地模型: {local_clip_path}")
                 self.clip_model = CLIPModel.from_pretrained(local_clip_path, local_files_only=True).to(self.device)
-                print("   ✓ 本地CLIP模型加载完成")
+                logger.info("   ✓ 本地CLIP模型加载完成")
             else:
-                print(f"   ❌ 本地模型路径不存在: {local_clip_path}")
+                logger.info(f"   ❌ 本地模型路径不存在: {local_clip_path}")
                 raise FileNotFoundError("本地模型不存在")
         except Exception as e:
-            print(f"   ❌ 本地CLIP模型加载失败: {e}")
-            print("   ⏳ 尝试在线下载CLIP模型，这可能需要几分钟...")
+            logger.error(f"   ❌ 本地CLIP模型加载失败: {e}")
+            logger.info("   ⏳ 尝试在线下载CLIP模型，这可能需要几分钟...")
             try:
                 self.clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
-                print("   ✓ 在线CLIP模型下载并加载完成")
+                logger.info("   ✓ 在线CLIP模型下载并加载完成")
             except Exception as e2:
-                print(f"   ❌ CLIP模型加载完全失败: {e2}")
+                logger.error(f"   ❌ CLIP模型加载完全失败: {e2}")
                 raise e2
 
-        print("🔧 正在加载CLIP处理器...")
-        print("   ⏳ 处理器加载中（可能需要下载）...")
+        logger.info("🔧 正在加载CLIP处理器...")
+        logger.info("   ⏳ 处理器加载中（可能需要下载）...")
         # ===== 修改这里：使用你的本地CLIP处理器路径 =====
         local_clip_path = r"F:\Models\clip-vit-base-patch32"
         try:
             if os.path.exists(local_clip_path):
-                print(f"   📁 使用本地处理器: {local_clip_path}")
+                logger.info(f"   📁 使用本地处理器: {local_clip_path}")
                 self.clip_processor = CLIPProcessor.from_pretrained(local_clip_path, local_files_only=True)
-                print("   ✓ 本地CLIP处理器加载完成")
+                logger.info("   ✓ 本地CLIP处理器加载完成")
             else:
-                print(f"   ❌ 本地处理器路径不存在，使用在线版本")
+                logger.info(f"   ❌ 本地处理器路径不存在，使用在线版本")
                 self.clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-                print("   ✓ 在线CLIP处理器加载完成")
+                logger.info("   ✓ 在线CLIP处理器加载完成")
         except Exception as e:
-            print(f"   ❌ CLIP处理器加载失败: {e}")
+            logger.error(f"   ❌ CLIP处理器加载失败: {e}")
             raise e
 
         # 初始化OCR引擎（首次运行较慢）
-        print("👁 正在初始化OCR引擎...")
-        print("   ⏳ 首次运行需要下载模型文件，这可能需要几分钟，请耐心等待...")
-        print("   📥 正在下载中文和英文OCR模型...")
+        logger.info("👁 正在初始化OCR引擎...")
+        logger.info("   ⏳ 首次运行需要下载模型文件，这可能需要几分钟，请耐心等待...")
+        logger.info("   📥 正在下载中文和英文OCR模型...")
         try:
             self.ocr_reader = easyocr.Reader(['ch_sim', 'en'], gpu=False)  # 强制使用CPU避免GPU问题
-            print("   ✓ OCR引擎初始化完成")
+            logger.info("   ✓ OCR引擎初始化完成")
         except Exception as e:
-            print(f"   ⚠ OCR初始化失败，将跳过OCR功能: {e}")
-            print("   将继续运行，但跳过OCR公式识别功能")
+            logger.warning(f"   ⚠ OCR初始化失败，将跳过OCR功能: {e}")
+            logger.info("   将继续运行，但跳过OCR公式识别功能")
             self.ocr_reader = None
 
         # 存储处理结果
         self.results = []
 
-        print("🎉 多模态预处理工具初始化完成！")
-        print("=" * 50)
+        logger.info("🎉 多模态预处理工具初始化完成！")
+        logger.info("=" * 50)
 
     def process_pdf(self, file_path):
         """处理PDF文件，提取文本和图像"""
-        print(f"开始处理PDF文件: {file_path}")
+        logger.info(f"开始处理PDF文件: {file_path}")
         doc = fitz.open(file_path)
         base_filename = os.path.splitext(os.path.basename(file_path))[0]
 
@@ -914,7 +831,7 @@ class MultimodalPreprocessor:
 
         try:
             for page_num in range(len(doc)):
-                print(f"处理第 {page_num + 1}/{len(doc)} 页...")
+                logger.info(f"处理第 {page_num + 1}/{len(doc)} 页...")
                 page = doc.load_page(page_num)
                 page_text = page.get_text()
 
@@ -949,7 +866,7 @@ class MultimodalPreprocessor:
 
             # 保存PDF专用元数据
             self.save_pdf_metadata(file_path, base_filename)
-            print(f"PDF处理完成！结果保存在output/{base_filename}_pdf_metadata.json")
+            logger.info(f"PDF处理完成！结果保存在output/{base_filename}_pdf_metadata.json")
 
         finally:
             # 恢复原始结果列表并合并当前结果
@@ -972,7 +889,7 @@ class MultimodalPreprocessor:
                 text_features = self.clip_model.get_text_features(**inputs)
                 text_vector = text_features.cpu().numpy()[0]
         except Exception as e:
-            print(f"文本向量化失败: {e}")
+            logger.error(f"文本向量化失败: {e}")
             text_vector = np.zeros(512)  # CLIP默认向量维度
 
         return {
@@ -996,7 +913,7 @@ class MultimodalPreprocessor:
                 format_type = img.format
                 mode = img.mode
         except Exception as e:
-            print(f"读取图像信息失败: {e}")
+            logger.error(f"读取图像信息失败: {e}")
             width = height = 0
             format_type = mode = "unknown"
 
@@ -1013,7 +930,7 @@ class MultimodalPreprocessor:
             description_tags = self.generate_image_descriptions(enhanced_path)
 
         except Exception as e:
-            print(f"图像处理失败: {e}")
+            logger.error(f"图像处理失败: {e}")
             image_vector = np.zeros(512)
             description_tags = []
 
@@ -1053,7 +970,7 @@ class MultimodalPreprocessor:
         try:
             descriptions = self.generate_image_descriptions(image_path)
         except Exception as e:
-            print(f"生成图片描述失败: {e}")
+            logger.error(f"生成图片描述失败: {e}")
             descriptions = []
 
         base, _ = os.path.splitext(os.path.basename(image_path))
@@ -1065,7 +982,7 @@ class MultimodalPreprocessor:
                     "clip_descriptions": descriptions
                 }, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"保存图片描述失败: {e}")
+            logger.error(f"保存图片描述失败: {e}")
         return desc_path
 
     def generate_image_descriptions(self, image_path):
@@ -1112,7 +1029,7 @@ class MultimodalPreprocessor:
             return descriptions
 
         except Exception as e:
-            print(f"图像描述生成错误: {image_path}, {str(e)}")
+            logger.error(f"图像描述生成错误: {image_path}, {str(e)}")
             return []
 
     def save_text_data(self, data, filename, page_num):
@@ -1254,7 +1171,7 @@ class MultimodalPreprocessor:
                             formulas.append(formula_data)
 
             except Exception as e:
-                print(f"OCR公式识别失败 (页面 {page_num + 1}): {e}")
+                logger.error(f"OCR公式识别失败 (页面 {page_num + 1}): {e}")
 
         # 保存公式数据
         if formulas:
@@ -1293,7 +1210,7 @@ class MultimodalPreprocessor:
                         tables.append(table_data)
 
         except Exception as e:
-            print(f"Camelot表格提取跳过 (页面 {page_num + 1}): {e}")
+            logger.info(f"Camelot表格提取跳过 (页面 {page_num + 1}): {e}")
 
         # 备用方法：从文本中识别表格模式
         table_patterns = self.detect_text_tables(page_text)
@@ -1440,7 +1357,7 @@ class MultimodalPreprocessor:
                     df = pd.DataFrame(table["data"])
                     df.to_csv(csv_path, index=False, encoding="utf-8")
                 except Exception as e:
-                    print(f"保存表格CSV失败: {e}")
+                    logger.error(f"保存表格CSV失败: {e}")
 
         # 记录到结果
         for table in tables:
@@ -1555,7 +1472,7 @@ class AdvancedPPTProcessor:
         Returns:
             dict: 包含幻灯片到图片映射关系的字典
         """
-        print(f"开始通过ZIP方式提取图片: {file_path}")
+        logger.info(f"开始通过ZIP方式提取图片: {file_path}")
 
         base_filename = os.path.splitext(os.path.basename(file_path))[0]
         slide_image_mapping = {}
@@ -1564,7 +1481,7 @@ class AdvancedPPTProcessor:
         with tempfile.TemporaryDirectory() as temp_dir:
             try:
                 # 1. 解压PPTX文件
-                print("正在解压PPTX文件...")
+                logger.info("正在解压PPTX文件...")
                 with zipfile.ZipFile(file_path, 'r') as zip_ref:
                     zip_ref.extractall(temp_dir)
 
@@ -1574,11 +1491,11 @@ class AdvancedPPTProcessor:
                 rels_dir = os.path.join(temp_dir, "ppt", "slides", "_rels")
 
                 if not os.path.exists(media_dir):
-                    print("未找到media目录，可能没有图片")
+                    logger.info("未找到media目录，可能没有图片")
                     return slide_image_mapping
 
-                print(f"找到media目录: {media_dir}")
-                print(f"媒体文件: {os.listdir(media_dir)}")
+                logger.info(f"找到media目录: {media_dir}")
+                logger.info(f"媒体文件: {os.listdir(media_dir)}")
 
                 # 3. 遍历所有幻灯片XML文件
                 if os.path.exists(slides_dir):
@@ -1588,14 +1505,14 @@ class AdvancedPPTProcessor:
                             if slide_num is None:
                                 continue
 
-                            print(f"处理幻灯片 {slide_num}: {slide_file}")
+                            logger.info(f"处理幻灯片 {slide_num}: {slide_file}")
 
                             # 解析幻灯片XML获取图片关系ID
                             slide_xml_path = os.path.join(slides_dir, slide_file)
                             image_rids = self._parse_slide_xml_for_images(slide_xml_path)
 
                             if image_rids:
-                                print(f"幻灯片 {slide_num} 中找到图片关系ID: {image_rids}")
+                                logger.info(f"幻灯片 {slide_num} 中找到图片关系ID: {image_rids}")
 
                                 # 解析关系文件获取实际文件名
                                 rels_file = slide_file + ".rels"
@@ -1606,16 +1523,16 @@ class AdvancedPPTProcessor:
 
                                     if image_files:
                                         slide_image_mapping[slide_num] = image_files
-                                        print(f"幻灯片 {slide_num} 映射到图片: {image_files}")
+                                        logger.info(f"幻灯片 {slide_num} 映射到图片: {image_files}")
 
                                         # 复制图片到输出目录
                                         self._copy_images_to_output(media_dir, image_files,
                                                                     base_filename, slide_num)
 
-                print(f"图片提取完成，映射关系: {slide_image_mapping}")
+                logger.info(f"图片提取完成，映射关系: {slide_image_mapping}")
 
             except Exception as e:
-                print(f"ZIP方式图片提取失败: {e}")
+                logger.error(f"ZIP方式图片提取失败: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -1663,10 +1580,10 @@ class AdvancedPPTProcessor:
                 embed_attr = blip.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
                 if embed_attr:
                     image_rids.append(embed_attr)
-                    print(f"找到图片引用ID: {embed_attr}")
+                    logger.info(f"找到图片引用ID: {embed_attr}")
 
         except Exception as e:
-            print(f"解析幻灯片XML失败 {slide_xml_path}: {e}")
+            logger.error(f"解析幻灯片XML失败 {slide_xml_path}: {e}")
 
         return image_rids
 
@@ -1706,10 +1623,10 @@ class AdvancedPPTProcessor:
                     # 提取文件名 (../media/image1.png -> image1.png)
                     filename = os.path.basename(target)
                     image_files.append(filename)
-                    print(f"关系映射: {rel_id} -> {filename}")
+                    logger.info(f"关系映射: {rel_id} -> {filename}")
 
         except Exception as e:
-            print(f"解析关系文件失败 {rels_path}: {e}")
+            logger.error(f"解析关系文件失败 {rels_path}: {e}")
 
         return image_files
 
@@ -1735,7 +1652,7 @@ class AdvancedPPTProcessor:
 
                     # 复制图片
                     shutil.copy2(source_path, output_path)
-                    print(f"复制图片: {source_path} -> {output_path}")
+                    logger.info(f"复制图片: {source_path} -> {output_path}")
 
                     # 生成CLIP描述（根据模式决定是否生成）
                     desc_path = None
@@ -1743,9 +1660,9 @@ class AdvancedPPTProcessor:
                         try:
                             desc_path = self.preprocessor.clip_generate_description(output_path)
                         except Exception as e:
-                            print(f"生成CLIP描述失败，跳过: {e}")
+                            logger.error(f"生成CLIP描述失败，跳过: {e}")
                     else:
-                        print("快速模式：跳过CLIP描述生成")
+                        logger.info("快速模式：跳过CLIP描述生成")
 
                     # 记录到结果中
                     self.preprocessor.results.append({
@@ -1758,10 +1675,10 @@ class AdvancedPPTProcessor:
                     })
 
                 else:
-                    print(f"源图片文件不存在: {source_path}")
+                    logger.warning(f"源图片文件不存在: {source_path}")
 
             except Exception as e:
-                print(f"复制图片失败 {image_file}: {e}")
+                logger.error(f"复制图片失败 {image_file}: {e}")
 
     def extract_and_convert_equations(self, slide, slide_number):
         """
@@ -1786,7 +1703,7 @@ class AdvancedPPTProcessor:
                         # 检查是否包含OMML公式标签
                         omml_content = self._extract_omml_from_xml(shape_xml)
                         if omml_content:
-                            print(f"在幻灯片 {slide_number} 形状 {shape_index} 中发现OMML公式")
+                            logger.info(f"在幻灯片 {slide_number} 形状 {shape_index} 中发现OMML公式")
 
                             # 尝试转换OMML到LaTeX
                             latex_content = self._convert_omml_to_latex(omml_content)
@@ -1817,7 +1734,7 @@ class AdvancedPPTProcessor:
 
                 # 如果没有找到OMML，检查是否为可能的公式图片
                 if self._is_potential_formula_image(shape):
-                    print(f"在幻灯片 {slide_number} 形状 {shape_index} 中发现潜在公式图片")
+                    logger.info(f"在幻灯片 {slide_number} 形状 {shape_index} 中发现潜在公式图片")
 
                     # 使用图片处理流程处理公式图片
                     formula_image_path = self._process_formula_image(shape, slide_number, shape_index)
@@ -1845,7 +1762,7 @@ class AdvancedPPTProcessor:
                         })
 
             except Exception as e:
-                print(f"处理幻灯片 {slide_number} 形状 {shape_index} 时出错: {e}")
+                logger.error(f"处理幻灯片 {slide_number} 形状 {shape_index} 时出错: {e}")
                 continue
 
         return equations
@@ -1857,7 +1774,7 @@ class AdvancedPPTProcessor:
             if hasattr(shape, '_element'):
                 return ET.tostring(shape._element, encoding='unicode')
         except Exception as e:
-            print(f"获取形状XML失败: {e}")
+            logger.error(f"获取形状XML失败: {e}")
         return None
 
     def _extract_omml_from_xml(self, xml_string):
@@ -1876,7 +1793,7 @@ class AdvancedPPTProcessor:
                     return matches[0]
 
         except Exception as e:
-            print(f"提取OMML失败: {e}")
+            logger.error(f"提取OMML失败: {e}")
         return None
 
     def _convert_omml_to_latex(self, omml_content):
@@ -1893,7 +1810,7 @@ class AdvancedPPTProcessor:
                 return latex_result
 
         except Exception as e:
-            print(f"OMML转LaTeX失败: {e}")
+            logger.error(f"OMML转LaTeX失败: {e}")
 
         return None
 
@@ -1924,9 +1841,9 @@ class AdvancedPPTProcessor:
                 os.unlink(temp_file_path)
 
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print("Pandoc不可用，跳过pandoc转换")
+            logger.info("Pandoc不可用，跳过pandoc转换")
         except Exception as e:
-            print(f"Pandoc转换失败: {e}")
+            logger.error(f"Pandoc转换失败: {e}")
 
         return None
 
@@ -1973,7 +1890,7 @@ class AdvancedPPTProcessor:
             return f"${text_content}$"
 
         except Exception as e:
-            print(f"简单转换失败: {e}")
+            logger.error(f"简单转换失败: {e}")
 
         return None
 
@@ -1996,7 +1913,7 @@ class AdvancedPPTProcessor:
                     return True
 
         except Exception as e:
-            print(f"检查潜在公式图片失败: {e}")
+            logger.error(f"检查潜在公式图片失败: {e}")
 
         return False
 
@@ -2010,12 +1927,12 @@ class AdvancedPPTProcessor:
 
                 # 这里需要实现图片导出逻辑
                 # 由于python-pptx的限制，可能需要使用其他方法
-                print(f"识别到公式图片，但需要额外的导出逻辑: {image_filename}")
+                logger.info(f"识别到公式图片，但需要额外的导出逻辑: {image_filename}")
 
                 return image_path
 
         except Exception as e:
-            print(f"处理公式图片失败: {e}")
+            logger.error(f"处理公式图片失败: {e}")
 
         return None
 
@@ -2026,7 +1943,7 @@ class AdvancedPPTProcessor:
         Args:
             file_path: PPTX文件路径
         """
-        print(f"开始高级PPTX处理: {file_path}")
+        logger.info(f"开始高级PPTX处理: {file_path}")
         base_filename = os.path.splitext(os.path.basename(file_path))[0]
 
         # 重置结果记录，为当前PPTX文件单独记录
@@ -2044,11 +1961,11 @@ class AdvancedPPTProcessor:
             # 3. 生成PPTX专用元数据
             self._save_pptx_metadata(file_path, base_filename, slide_image_mapping)
 
-            print(f"高级PPTX处理完成: {file_path}")
-            print(f"PPTX元数据已保存: output/{base_filename}_pptx_metadata.json")
+            logger.info(f"高级PPTX处理完成: {file_path}")
+            logger.info(f"PPTX元数据已保存: output/{base_filename}_pptx_metadata.json")
 
         except Exception as e:
-            print(f"高级PPTX处理失败: {e}")
+            logger.error(f"高级PPTX处理失败: {e}")
             import traceback
             traceback.print_exc()
         finally:
@@ -2064,7 +1981,7 @@ class AdvancedPPTProcessor:
             # 处理公式
             equations = self.extract_and_convert_equations(slide, slide_index)
             if equations:
-                print(f"在幻灯片 {slide_index} 中找到 {len(equations)} 个公式")
+                logger.info(f"在幻灯片 {slide_index} 中找到 {len(equations)} 个公式")
 
                 # 保存公式信息到JSON文件
                 formulas_json_path = f"output/formulas/{base_filename}_slide_{slide_index}_formulas.json"
@@ -2081,7 +1998,7 @@ class AdvancedPPTProcessor:
                 with open(formulas_json_path, "w", encoding="utf-8") as f:
                     json.dump(formulas_output, f, ensure_ascii=False, indent=2)
 
-                print(f"公式信息已保存到: {formulas_json_path}")
+                logger.info(f"公式信息已保存到: {formulas_json_path}")
 
             # 提取文本
             slide_text_items = []
@@ -2138,7 +2055,7 @@ class AdvancedPPTProcessor:
                                 else:
                                     cell_text = cell.text.strip() if cell.text else ""
                             except Exception as e:
-                                print(f"提取单元格文本失败: {e}")
+                                logger.error(f"提取单元格文本失败: {e}")
                                 cell_text = ""
                             row_values.append(cell_text)
                         data_matrix.append(row_values)
@@ -2185,11 +2102,11 @@ class AdvancedPPTProcessor:
                             "extraction_method": "python_pptx_optimized"
                         })
 
-                        print(
+                        logger.info(
                             f"✓ 提取表格 {table_counter}: {len(data_matrix)}行 x {len(data_matrix[0]) if data_matrix else 0}列")
-                        print(f"  位置: left={table_position['left']:.2f}in, top={table_position['top']:.2f}in")
+                        logger.info(f"  位置: left={table_position['left']:.2f}in, top={table_position['top']:.2f}in")
                     else:
-                        print(f"⚠ 跳过空表格 {table_counter}")
+                        logger.warning(f"⚠ 跳过空表格 {table_counter}")
 
     def _save_pptx_metadata(self, file_path, base_filename, slide_image_mapping):
         """
@@ -2324,7 +2241,7 @@ def build_multimodal_knowledge_graph(
     def log(message: str):
         """条件日志输出"""
         if verbose:
-            print(message)
+            logger.info(message)
 
     # 初始化结果字典
     result = {
@@ -2575,18 +2492,40 @@ def build_multimodal_knowledge_graph(
 
 # 保留原来的主函数作为示例
 if __name__ == "__main__":
+    # 为独立运行生成 request_id
+    standalone_request_id = str(uuid.uuid4())
+    logger._request_filter._standalone_request_id = standalone_request_id
 
-    
-result = build_multimodal_knowledge_graph(
-    neo4j_uri="bolt://101.132.130.25:7687",
-    neo4j_user="neo4j",
-    neo4j_password="wangshuxvan@1",
-    deepseek_api_key="sk-c28ec338b39e4552b9e6bded47466442",
-    input_dir = r"C:\Users\Lin\PycharmProjects\PythonProject\input",
-    output_dir = r"C:\Users\Lin\PycharmProjects\PythonProject\output",
-    document_name="Arduino课程PPT",
-    fast_mode=False,
-    clear_database=False,
-    verbose=True
-)
+    logger.info(f"独立运行模式，生成 request_id: {standalone_request_id}")
+
+    result = build_multimodal_knowledge_graph(
+        neo4j_uri="bolt://101.132.130.25:7687",
+        neo4j_user="neo4j",
+        neo4j_password="wangshuxvan@1",
+        deepseek_api_key="sk-c28ec338b39e4552b9e6bded47466442",
+        input_dir=r"C:\Users\Lin\PycharmProjects\PythonProject\input",
+        output_dir=r"C:\Users\Lin\PycharmProjects\PythonProject\output",
+        document_name="Arduino课程PPT",
+        fast_mode=False,
+        clear_database=False,
+        verbose=True
+    )
+
+    # 输出最终结果
+    if result['success']:
+        logger.info(f"✅ 处理成功完成！")
+        logger.info(f"📊 处理统计:")
+        logger.info(f"   - 输入文件: {len(result['files_processed'])}个")
+        logger.info(f"   - PPT文件: {result['statistics']['ppt_count']}个")
+        logger.info(f"   - PDF文件: {result['statistics']['pdf_count']}个")
+        logger.info(f"   - 抽取实体: {result['entities_extracted']}个")
+        logger.info(f"   - 抽取关系: {result['relationships_extracted']}个")
+        logger.info(f"   - 保存实体: {result['entities_saved']}个")
+        logger.info(f"   - 保存关系: {result['relationships_saved']}个")
+        logger.info(f"   - 数据库节点总数: {result['neo4j_stats']['total_nodes']}个")
+        logger.info(f"   - 数据库关系总数: {result['neo4j_stats']['total_relationships']}个")
+    else:
+        logger.error(f"❌ 处理失败: {result['error']}")
+        logger.info("请检查配置参数和网络连接")
+
 
